@@ -5,6 +5,7 @@ from wtforms import Form, StringField, TextAreaField, PasswordField, validators
 from passlib.hash import sha256_crypt
 import os
 from dotenv import load_dotenv
+from functools import wraps
 
 
 app = Flask(__name__)
@@ -99,17 +100,54 @@ def login():
 
         if result > 0:
             # Get stored hash
-            data = cur.fetchnone()
+            data = cur.fetchone()
             password = data['password']
 
             # Compare the passwords
 
             if sha256_crypt.verify(password_candidate, password):
-                app.logger.info('PASSWORD MATCHED')
-        else:
-            app.logger.info('NO USER FOUND')
+                session['logged_in'] = True
+                session['username'] = username
 
-    return redirect('login.html')
+                flash('You are now logged in', 'success')
+                return redirect(url_for('dashboard'))
+
+            else:
+                error = 'Invalid Login'
+                return render_template('login.html', error=error)
+
+        # cur.close()
+        else:
+            error = 'Username not found'
+            return render_template('login.html', error=error)
+    return render_template('login.html')
+
+
+# Check if user is logged in
+def is_logged_in(f):
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        if 'logged_in' in session:
+            return f(*args, **kwargs)
+        else:
+            flash('Unauthorized, Please login', 'danger')
+            return redirect(url_for('login'))
+    return wrap
+
+
+# Dashboard
+@app.route('/dashboard')
+@is_logged_in
+def dashboard():
+    return render_template('dashboard.html')
+
+
+# Logout
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('You are now logged out', 'success')
+    return redirect(url_for('login'))
 
 
 if __name__ == '__main__':
