@@ -1,9 +1,25 @@
-from flask import Flask, render_template, flash, redirect, url_for, session, logging
+from flask import Flask, render_template, flash, redirect, url_for, session, logging, request
 from data import articles
 from flask_mysqldb import MySQL
 from wtforms import Form, StringField, TextAreaField, PasswordField, validators
 from passlib.hash import sha256_crypt
+import os
+from dotenv import load_dotenv
+
+
 app = Flask(__name__)
+mysql = MySQL(app)
+
+# Config mySQL
+basedir = os.path.abspath(os.path.dirname(__file__))
+load_dotenv(os.path.join(basedir, '.env'))
+
+app.config['MYSQL_HOST'] = os.environ.get('MYSQL_HOST')
+app.config['MYSQL_USER'] = os.environ.get('MYSQL_USER')
+app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQL_PASSWORD')
+app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB')
+app.config['MYSQL_CURSORCLASS'] = os.environ.get('MYSQL_CURSORCLASS')
+app.secret_key = os.environ.get('SECRET_KEY')
 
 some_articles = articles()
 
@@ -37,6 +53,32 @@ class RegisterForm(Form):
         validators.EqualTo('confirm', message='Passwords do not match'),
     ])
     confirm = PasswordField('Confirm Password')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegisterForm(request.form)
+    if request.method == 'POST' and form.validate():
+        name = form.name.data
+        email = form.email.data
+        username = form.username.data
+        password = sha256_crypt.encrypt(str(form.password.data))
+
+        # Create cursor
+        cur = mysql.connection.cursor()
+        cur.execute("INSERT INTO users(name, email, username, password) VALUES(%s, %s, %s, %s)",
+                    (name, email, username, password))
+
+        # Commit to db
+        mysql.connection.commit()
+
+        # Close connection
+        cur.close()
+
+        flash('You are now registered and ready to go', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('register.html', form=form)
 
 
 if __name__ == '__main__':
