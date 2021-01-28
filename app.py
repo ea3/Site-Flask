@@ -22,7 +22,7 @@ app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB')
 app.config['MYSQL_CURSORCLASS'] = os.environ.get('MYSQL_CURSORCLASS')
 app.secret_key = os.environ.get('SECRET_KEY')
 
-some_articles = articles()
+# some_articles = articles()
 
 
 @app.route('/')
@@ -37,7 +37,20 @@ def about():
 
 @app.route('/articles')
 def articles():
-    return render_template('articles.html', articles=some_articles)
+    # Create cursor
+    cur = mysql.connection.cursor()
+    # Get articles
+    result = cur.execute("SELECT * FROM articles")
+
+    articles1 = cur.fetchall()
+
+    if result > 0:
+        return render_template('articles.html', articles1=articles1)
+    else:
+        msg = 'No Articles Found'
+        cur.close()
+        return render_template('articles.html', msg=msg)
+
 
 
 @app.route('/article/<string:article_id>/')
@@ -139,15 +152,72 @@ def is_logged_in(f):
 @app.route('/dashboard')
 @is_logged_in
 def dashboard():
-    return render_template('dashboard.html')
+    # Create cursor
+    cur = mysql.connection.cursor()
+
+    # Get articles
+    result = cur.execute("SELECT * FROM articles")
+
+    articles1 = cur.fetchall()
+
+    if result > 0:
+        return render_template('dashboard.html', articles1=articles1)
+    else:
+        msg = 'No Articles Found'
+        cur.close()
+        return render_template('dashboard.html', msg=msg)
+
+
+
+
+
+
+
 
 
 # Logout
 @app.route('/logout')
+@is_logged_in
 def logout():
     session.clear()
     flash('You are now logged out', 'success')
-    return redirect(url_for('login'))
+    return redirect(url_for('home'))
+
+
+# Article form
+class ArticleForm(Form):
+    title = StringField('Title', [validators.Length(min=1, max=200)])
+    body = TextAreaField('Body', [validators.Length(min=20)])
+
+
+# Add an article
+@app.route('/add_article', methods=['GET', 'POST'])
+@is_logged_in
+def add_article():
+    form = ArticleForm(request.form)
+    if request.method == 'POST' and form.validate():
+        title = form.title.data
+        body = form.body.data
+
+        # Create cursor
+
+        cur = mysql.connection.cursor()
+
+        # Execute
+
+        cur.execute("INSERT INTO articles(title, body, author) VALUES(%s, %s, %s)", (title, body, session['username']))
+
+        # Commit to db
+        mysql.connection.commit()
+
+        # Close
+        cur.close()
+
+        flash('Article created', 'success')
+
+        return redirect(url_for('dashboard'))
+
+    return render_template('add_article.html', form=form)
 
 
 if __name__ == '__main__':
