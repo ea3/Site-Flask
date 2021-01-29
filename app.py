@@ -7,7 +7,6 @@ import os
 from dotenv import load_dotenv
 from functools import wraps
 
-
 app = Flask(__name__)
 mysql = MySQL(app)
 
@@ -22,40 +21,8 @@ app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB')
 app.config['MYSQL_CURSORCLASS'] = os.environ.get('MYSQL_CURSORCLASS')
 app.secret_key = os.environ.get('SECRET_KEY')
 
+
 # some_articles = articles()
-
-
-@app.route('/')
-def home():
-    return render_template('home.html')
-
-
-@app.route('/about')
-def about():
-    return render_template('about.html')
-
-
-@app.route('/articles')
-def articles():
-    # Create cursor
-    cur = mysql.connection.cursor()
-    # Get articles
-    result = cur.execute("SELECT * FROM articles")
-
-    articles1 = cur.fetchall()
-
-    if result > 0:
-        return render_template('articles.html', articles1=articles1)
-    else:
-        msg = 'No Articles Found'
-        cur.close()
-        return render_template('articles.html', msg=msg)
-
-
-
-@app.route('/article/<string:article_id>/')
-def article(article_id):
-    return render_template('article.html', id=article_id)
 
 
 class RegisterForm(Form):
@@ -93,6 +60,7 @@ def register():
         return redirect(url_for('login'))
 
     return render_template('register.html', form=form)
+
 
 # User login
 
@@ -148,31 +116,61 @@ def is_logged_in(f):
     return wrap
 
 
-# Dashboard
-@app.route('/dashboard')
+@app.route('/')
+def home():
+    return render_template('home.html')
+
+
+@app.route('/about')
+def about():
+    return render_template('about.html')
+
+
+@app.route('/article/<string:article_id>/')
 @is_logged_in
-def dashboard():
+def article(article_id):
     # Create cursor
     cur = mysql.connection.cursor()
+    # Get articles
+    result = cur.execute("SELECT * FROM articles WHERE id = %s", [article_id])
+    article1 = cur.fetchone()
 
+    return render_template('article.html', article=article1)
+
+
+@app.route('/articles')
+@is_logged_in
+def articles():
+    # Create cursor
+    cur = mysql.connection.cursor()
     # Get articles
     result = cur.execute("SELECT * FROM articles")
 
     articles1 = cur.fetchall()
 
     if result > 0:
+        return render_template('articles.html', articles1=articles1)
+    else:
+        msg = 'No Articles Found'
+        cur.close()
+        return render_template('articles.html', msg=msg)
+
+
+# Dashboard
+@app.route('/dashboard')
+@is_logged_in
+def dashboard():
+    # Create cursor
+    cur = mysql.connection.cursor()
+    # Get articles
+    result = cur.execute("SELECT * FROM articles")
+    articles1 = cur.fetchall()
+    if result > 0:
         return render_template('dashboard.html', articles1=articles1)
     else:
         msg = 'No Articles Found'
         cur.close()
         return render_template('dashboard.html', msg=msg)
-
-
-
-
-
-
-
 
 
 # Logout
@@ -218,6 +216,66 @@ def add_article():
         return redirect(url_for('dashboard'))
 
     return render_template('add_article.html', form=form)
+
+
+# Edit an article
+@app.route('/edit_article/<string:article_id>', methods=['GET', 'POST'])
+@is_logged_in
+def edit_article(article_id):
+    # We need to query for the article.
+    # create cursor
+    cur = mysql.connection.cursor()
+
+    # Get article by id
+    result = cur.execute("SELECT * FROM articles WHERE id = %s", [article_id])
+
+    article2 = cur.fetchone()
+    # Get form
+    form = ArticleForm(request.form)
+
+    # Populate article from fields
+    form.title.data = article2['title']
+    form.body.data = article2['body']
+
+    if request.method == 'POST' and form.validate():
+        # Take the info from the form, th info to be updated.
+        title = request.form['title']
+        body = request.form['body']
+
+        # Create cursor
+
+        cur = mysql.connection.cursor()
+
+        # Execute
+
+        cur.execute("UPDATE articles SET title=%s, body=%s WHERE id = %s", (title, body, article_id))
+
+        # Commit to db
+        mysql.connection.commit()
+
+        # Close
+        cur.close()
+
+        flash('Article Updated', 'success')
+
+        return redirect(url_for('dashboard'))
+
+    return render_template('edit_article.html', form=form)
+
+
+@app.route('/delete_article/<string:article_id>', methods=['POST'])
+@is_logged_in
+def delete_article(article_id):
+    # Create cursor
+    cur = mysql.connection.cursor()
+    # Execute
+    cur.execute("DELETE FROM articles WHERE id = %s", [article_id])
+    # Commit to DB
+    mysql.connection.commit()
+    # Close connection
+    cur.close()
+    flash('Article Deleted', 'success')
+    return redirect(url_for('dashboard'))
 
 
 if __name__ == '__main__':
